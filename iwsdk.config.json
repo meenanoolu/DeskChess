@@ -14,6 +14,7 @@
       "offer": "always",
       "features": {
         "handTracking": true,
+        "gazeTracking": true,
         "anchors": true,
         "planeDetection": true,
         "meshDetection": true
@@ -40,8 +41,16 @@
       }
     },
     "features": {
-      "locomotion": false,
+      "locomotion": {
+        "browserControls": true,
+        "turningMethod": "smooth",
+        "enableJumping": true
+      },
       "grabbing": true,
+      "gaze": {
+        "showDebugReticle": true,
+        "pointerTransformFollowsHand": true
+      },
       "physics": false,
       "sceneUnderstanding": true,
       "environmentRaycast": false,
