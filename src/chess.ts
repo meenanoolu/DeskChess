@@ -107,10 +107,9 @@ export class ChessSystem extends createSystem({
   init() {
     this.board = new Group();
     this.board.name = 'Chess Board';
-    this.board.position.set(0, 0.43, -1.2);
+    this.board.position.set(0, 1.22, -0.95);
     this.board.visible = true;
     this.placed = true;
-    this.board.visible = false;
     this.boardEntity = this.world.createTransformEntity(this.board);
 
     const wood = new MeshStandardMaterial({
