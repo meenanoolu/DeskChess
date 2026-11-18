@@ -11,5 +11,5 @@ export default defineConfig({
   },
   resolve: { dedupe: ['three'] },
   publicDir: 'public',
-  base: './',
+  base: '/DeskChess/',
 });
