@@ -13,11 +13,10 @@
       "mode": "ar",
       "offer": "always",
       "features": {
-        "handTracking": true,
+        "handTracking": { "required": true },
         "gazeTracking": true,
         "anchors": true,
-        "planeDetection": true,
-        "meshDetection": true
+        "planeDetection": true
       }
     },
     "input": {
@@ -28,32 +27,13 @@
       "near": 0.001,
       "far": 200,
       "camera": {
-        "position": [
-          0,
-          1.6,
-          1
-        ],
-        "lookAt": [
-          0,
-          1.15,
-          -0.95
-        ]
+        "position": [0, 1.6, 1],
+        "lookAt": [0, 1.15, -0.95]
       }
     },
     "features": {
-      "locomotion": {
-        "browserControls": true,
-        "turningMethod": "smooth",
-        "enableJumping": true
-      },
+      "locomotion": false,
       "grabbing": true,
-      "gaze": {
-        "showDebugReticle": true,
-        "pointerTransformFollowsHand": true
-      },
-      "physics": false,
-      "sceneUnderstanding": true,
-      "environmentRaycast": false,
       "spatialUI": {
         "kit": "horizon",
         "preferredColorScheme": "dark"
@@ -62,8 +42,8 @@
   },
   "dev": {
     "emulator": {
-      "device": "metaQuestPro",
-      "environment": "sunlit_living_room"
+      "device": "metaQuest3",
+      "environment": "office"
     }
   }
 }
