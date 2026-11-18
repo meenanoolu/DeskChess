@@ -1,92 +1,146 @@
 import * as THREE from 'three';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Chess } from 'chess.js';
+import { XRDevice, metaQuest3 } from 'iwer';
+import { DevUI } from '@iwer/devui';
 
 const hud = document.getElementById('hud');
 const setHud = (t) => { if (hud) hud.textContent = t; };
 
-const chess = new Chess();
-const S = 0.07;
+async function supports(mode) {
+  if (!navigator.xr?.isSessionSupported) return false;
+  try { return await navigator.xr.isSessionSupported(mode); }
+  catch { return false; }
+}
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+const native = (await supports('immersive-ar')) || (await supports('immersive-vr'));
+if (!native) {
+  const xrDevice = new XRDevice(metaQuest3, { stereoEnabled: false });
+  xrDevice.primaryInputMode = 'hand';
+  xrDevice.position.set(0, 1.35, 0.15);
+  xrDevice.hands.right.position.set(0.16, 1.02, -0.42);
+  xrDevice.hands.left.position.set(-0.18, 1.05, -0.38);
+  xrDevice.installRuntime({ forceInstall: true });
+  new DevUI(xrDevice);
+}
+
+const chess = new Chess();
+const S = 0.055;
+const boardPos = new THREE.Vector3(0, 0.9, -0.62);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x1a120c, 1);
+renderer.setClearColor(0x000000, 0);
 renderer.shadowMap.enabled = true;
 renderer.xr.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x24180f);
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 20);
-camera.position.set(0, 0.62, 0.78);
-camera.lookAt(0, 0, 0);
+camera.position.set(0.15, 1.55, 0.28);
 
-scene.add(new THREE.HemisphereLight(0xfff4e5, 0x3a2a1a, 1.1));
-const sun = new THREE.DirectionalLight(0xfff1d6, 1.6);
-sun.position.set(0.6, 1.4, 0.8);
+scene.add(new THREE.HemisphereLight(0xfff6ea, 0x3a2414, 1.15));
+const sun = new THREE.DirectionalLight(0xfff1d0, 1.7);
+sun.position.set(0.4, 2.2, 0.2);
 sun.castShadow = true;
 scene.add(sun);
 
 const root = new THREE.Group();
+root.position.copy(boardPos);
 scene.add(root);
 
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(boardPos);
+controls.enableDamping = true;
+controls.mouseButtons.LEFT = null;
+controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+controls.update();
+
 const table = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.55, 0.55, 0.03, 48),
-  new THREE.MeshStandardMaterial({ color: 0x5c3a24, roughness: 0.8 }),
+  new THREE.CylinderGeometry(0.42, 0.42, 0.025, 48),
+  new THREE.MeshStandardMaterial({ color: 0x6a4328, roughness: 0.72 }),
 );
 table.position.y = -0.02;
 table.receiveShadow = true;
 root.add(table);
 
-const dark = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.65 });
-const light = new THREE.MeshStandardMaterial({ color: 0xe6d3b1, roughness: 0.55 });
-const frameMat = new THREE.MeshStandardMaterial({ color: 0x3e2918, roughness: 0.7 });
-const frame = new THREE.Mesh(new THREE.BoxGeometry(S * 9.2, 0.018, S * 9.2), frameMat);
-frame.position.y = -0.004;
+const dark = new THREE.MeshStandardMaterial({ color: 0x8d5a32, roughness: 0.62 });
+const light = new THREE.MeshStandardMaterial({ color: 0xf0ddc0, roughness: 0.5 });
+const frame = new THREE.Mesh(
+  new THREE.BoxGeometry(S * 10, 0.016, S * 10),
+  new THREE.MeshStandardMaterial({ color: 0x3b2616, roughness: 0.7 }),
+);
 frame.receiveShadow = true;
 root.add(frame);
 
 for (let r = 0; r < 8; r++) {
   for (let c = 0; c < 8; c++) {
+    const id = String.fromCharCode(97 + c) + (8 - r);
     const sq = new THREE.Mesh(
-      new THREE.BoxGeometry(S * 0.98, 0.01, S * 0.98),
+      new THREE.BoxGeometry(S * 0.98, 0.008, S * 0.98),
       (r + c) % 2 === 0 ? light : dark,
     );
-    sq.position.set((c - 3.5) * S, 0.006, (r - 3.5) * S);
+    sq.position.set((c - 3.5) * S, 0.01, (r - 3.5) * S);
     sq.receiveShadow = true;
-    sq.userData.square = String.fromCharCode(97 + c) + (8 - r);
+    sq.userData.square = id;
     root.add(sq);
   }
 }
 
+function lathe(pts, mat) {
+  const mesh = new THREE.Mesh(new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), 18), mat);
+  mesh.castShadow = true;
+  return mesh;
+}
+const PROFILES = {
+  p: [[0.018, 0], [0.02, 0.008], [0.012, 0.02], [0.014, 0.036], [0.008, 0.048], [0.012, 0.056], [0, 0.056]],
+  r: [[0.02, 0], [0.022, 0.01], [0.014, 0.018], [0.015, 0.05], [0.02, 0.058], [0.02, 0.066], [0, 0.066]],
+  n: [[0.02, 0], [0.022, 0.01], [0.012, 0.02], [0.01, 0.05], [0.014, 0.062], [0, 0.062]],
+  b: [[0.02, 0], [0.022, 0.01], [0.01, 0.028], [0.012, 0.055], [0.006, 0.07], [0.01, 0.078], [0, 0.078]],
+  q: [[0.022, 0], [0.024, 0.01], [0.01, 0.03], [0.014, 0.07], [0.018, 0.082], [0.008, 0.092], [0, 0.092]],
+  k: [[0.022, 0], [0.024, 0.01], [0.011, 0.03], [0.014, 0.075], [0.018, 0.088], [0.006, 0.1], [0, 0.1]],
+};
+
 function pieceMesh(type, color) {
-  const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({
-    color: color === 'w' ? 0xf3e6c8 : 0xb42323,
-    metalness: color === 'w' ? 0.45 : 0.15,
-    roughness: 0.35,
+    color: color === 'w' ? 0xf4efe4 : 0xc4212a,
+    metalness: color === 'w' ? 0.55 : 0.25,
+    roughness: 0.32,
   });
-  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 0.012, 16), mat));
-  let body;
-  if (type === 'p') body = new THREE.Mesh(new THREE.SphereGeometry(0.016, 12, 12), mat);
-  else if (type === 'r') body = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.018, 0.042, 8), mat);
-  else if (type === 'n') body = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.05, 6), mat);
-  else if (type === 'b') body = new THREE.Mesh(new THREE.SphereGeometry(0.018, 12, 12), mat);
-  else if (type === 'q') body = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.02, 0.055, 10), mat);
-  else body = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.022, 0.06, 10), mat);
-  body.position.y = 0.03;
-  body.castShadow = true;
-  g.add(body);
-  if (type === 'q' || type === 'k') {
-    const top = new THREE.Mesh(new THREE.SphereGeometry(0.01, 8, 8), mat);
-    top.position.y = type === 'k' ? 0.07 : 0.062;
-    g.add(top);
+  const g = new THREE.Group();
+  g.add(lathe(PROFILES[type] || PROFILES.p, mat));
+  if (type === 'n') {
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 10), mat);
+    head.position.set(0.008, 0.058, 0.006);
+    g.add(head);
   }
   return g;
 }
 
 const pieces = new Map();
+const hints = new THREE.Group();
+root.add(hints);
+const hintMat = new THREE.MeshBasicMaterial({ color: 0x39e07a, transparent: true, opacity: 0.85 });
+
+function clearHints() {
+  while (hints.children.length) hints.remove(hints.children[0]);
+}
+function showHints(from) {
+  clearHints();
+  for (const move of chess.moves({ square: from, verbose: true })) {
+    const c = move.to.charCodeAt(0) - 97;
+    const r = 8 - Number(move.to[1]);
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(move.captured ? 0.012 : 0.008, 12, 12), hintMat);
+    dot.position.set((c - 3.5) * S, 0.03, (r - 3.5) * S);
+    dot.userData.square = move.to;
+    hints.add(dot);
+  }
+}
+
 function layout() {
   for (const obj of pieces.values()) root.remove(obj);
   pieces.clear();
@@ -96,119 +150,133 @@ function layout() {
       const p = board[r][c];
       if (!p) continue;
       const mesh = pieceMesh(p.type, p.color);
-      const sq = String.fromCharCode(97 + c) + (8 - r);
-      mesh.userData.square = sq;
-      mesh.position.set((c - 3.5) * S, 0.02, (r - 3.5) * S);
+      const id = String.fromCharCode(97 + c) + (8 - r);
+      mesh.userData.square = id;
+      mesh.userData.piece = true;
+      mesh.position.set((c - 3.5) * S, 0.014, (r - 3.5) * S);
       root.add(mesh);
-      pieces.set(sq, mesh);
+      pieces.set(id, mesh);
     }
   }
 }
 layout();
 
-function squareAt(worldPos) {
-  const local = root.worldToLocal(worldPos.clone());
-  const c = Math.round(local.x / S + 3.5);
-  const r = Math.round(local.z / S + 3.5);
-  if (c < 0 || c > 7 || r < 0 || r > 7) return null;
-  return String.fromCharCode(97 + c) + (8 - r);
-}
-function localOf(sq) {
-  const c = sq.charCodeAt(0) - 97;
-  const r = 8 - Number(sq[1]);
-  return new THREE.Vector3((c - 3.5) * S, 0.02, (r - 3.5) * S);
-}
-function turnText() {
+let selected = null;
+function turnLine() {
+  if (chess.isCheckmate()) return (chess.turn() === 'w' ? 'Black' : 'White') + ' wins by checkmate.';
+  if (chess.isDraw()) return 'Draw.';
   const who = chess.turn() === 'w' ? 'White' : 'Black';
-  const extra = chess.isCheckmate() ? ' — checkmate' : chess.inCheck() ? ' — check' : '';
-  return `${who} to move${extra}. Click a piece, then a square. On Quest: Enter AR and pinch.`;
+  return who + ' to move' + (chess.inCheck() ? ' — check' : '') + '.';
 }
-setHud(turnText());
+function helpLine() {
+  return native
+    ? 'Click a piece, then a green square. On Quest, Enter AR and pinch.'
+    : 'Click a piece, then a green square. Enter AR opens a Quest 3 emulator — use its hand controls and pinch.';
+}
+function refreshHud(extra = '') { setHud(turnLine() + ' ' + helpLine() + extra); }
+refreshHud();
 
-function tryMove(from, to) {
+function select(id) {
+  selected = id;
+  showHints(id);
+  refreshHud(' Holding ' + id + '.');
+}
+function finishMove(from, to) {
   const move = chess.move({ from, to, promotion: 'q' });
-  if (!move) return false;
+  selected = null;
+  clearHints();
+  if (!move) {
+    const mesh = pieces.get(from);
+    if (mesh) {
+      const c = from.charCodeAt(0) - 97;
+      const r = 8 - Number(from[1]);
+      mesh.position.set((c - 3.5) * S, 0.014, (r - 3.5) * S);
+    }
+    refreshHud(' Illegal.');
+    return false;
+  }
   layout();
-  setHud(turnText() + (move.captured ? ' Capture.' : ''));
+  refreshHud(move.captured ? ' Captured.' : '');
   return true;
 }
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
-let selected = null;
-function onPointer(e) {
+function hitSquare(event) {
   const rect = renderer.domElement.getBoundingClientRect();
-  pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-  pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
   const hits = raycaster.intersectObjects(root.children, true);
-  if (!hits.length) return;
-  let obj = hits[0].object;
-  while (obj && !obj.userData.square && obj.parent) obj = obj.parent;
-  const sq = obj?.userData?.square;
-  if (!sq) return;
-  if (!selected) {
-    if (pieces.has(sq)) {
-      selected = sq;
-      setHud(`Selected ${sq}. Click a destination square.`);
+  for (const hit of hits) {
+    let obj = hit.object;
+    while (obj && obj !== root) {
+      if (obj.userData.square) return obj.userData.square;
+      obj = obj.parent;
     }
-    return;
   }
-  if (sq === selected) {
-    selected = null;
-    setHud(turnText());
-    return;
-  }
-  if (!tryMove(selected, sq)) setHud(`Illegal move ${selected} → ${sq}. ${turnText()}`);
-  selected = null;
+  return null;
 }
-renderer.domElement.addEventListener('pointerdown', onPointer);
+renderer.domElement.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0 || renderer.xr.isPresenting) return;
+  const id = hitSquare(event);
+  if (!id) return;
+  if (selected) {
+    const legal = chess.moves({ square: selected, verbose: true }).some((m) => m.to === id);
+    if (legal) { finishMove(selected, id); return; }
+    if (id === selected) { selected = null; clearHints(); refreshHud(); return; }
+  }
+  const occupant = chess.get(id);
+  if (occupant && occupant.color === chess.turn()) select(id);
+});
 
 const factory = new XRHandModelFactory();
-const handState = [null, null];
+const grabbing = [null, null];
 for (let i = 0; i < 2; i++) {
   const hand = renderer.xr.getHand(i);
-  hand.add(factory.createHandModel(hand, 'spheres'));
+  hand.add(factory.createHandModel(hand, 'mesh'));
   scene.add(hand);
-}
-
-function pinchPoint(hand) {
-  const index = hand.joints?.['index-finger-tip'];
-  const thumb = hand.joints?.['thumb-tip'];
-  if (!index || !thumb) return null;
-  if (index.position.distanceTo(thumb.position) > 0.028) return null;
-  return index.position.clone().lerp(thumb.position, 0.5);
-}
-
-function updateHands() {
-  for (let i = 0; i < 2; i++) {
-    const hand = renderer.xr.getHand(i);
-    const point = pinchPoint(hand);
-    const state = handState[i];
-    if (point && !state) {
-      let best = null;
-      let bestD = 0.07;
-      for (const [sq, mesh] of pieces) {
-        const d = mesh.getWorldPosition(new THREE.Vector3()).distanceTo(point);
-        if (d < bestD) { bestD = d; best = { sq, mesh }; }
-      }
-      if (best) handState[i] = { from: best.sq, mesh: best.mesh };
-    } else if (point && state) {
-      const local = root.worldToLocal(point.clone());
-      state.mesh.position.set(local.x, 0.05, local.z);
-    } else if (!point && state) {
-      const target = squareAt(state.mesh.getWorldPosition(new THREE.Vector3()));
-      if (!target || !tryMove(state.from, target)) state.mesh.position.copy(localOf(state.from));
-      handState[i] = null;
+  hand.addEventListener('pinchstart', () => {
+    const tip = hand.joints?.['index-finger-tip'];
+    if (!tip) return;
+    const point = new THREE.Vector3().setFromMatrixPosition(tip.matrixWorld);
+    let best = null;
+    let bestD = 0.06;
+    for (const [id, mesh] of pieces) {
+      const d = mesh.getWorldPosition(new THREE.Vector3()).distanceTo(point);
+      const occ = chess.get(id);
+      if (occ && occ.color === chess.turn() && d < bestD) { bestD = d; best = id; }
     }
-  }
+    if (best) grabbing[i] = best;
+  });
+  hand.addEventListener('pinchend', () => {
+    const from = grabbing[i];
+    grabbing[i] = null;
+    if (!from) return;
+    const mesh = pieces.get(from);
+    if (!mesh) return;
+    const local = root.worldToLocal(mesh.getWorldPosition(new THREE.Vector3()));
+    const c = Math.round(local.x / S + 3.5);
+    const r = Math.round(local.z / S + 3.5);
+    const to = (c >= 0 && c < 8 && r >= 0 && r < 8) ? String.fromCharCode(97 + c) + (8 - r) : null;
+    if (!to || !finishMove(from, to)) {
+      const meshNow = pieces.get(from);
+      if (meshNow) {
+        const cc = from.charCodeAt(0) - 97;
+        const rr = 8 - Number(from[1]);
+        meshNow.position.set((cc - 3.5) * S, 0.014, (rr - 3.5) * S);
+      }
+    }
+  });
 }
 
 document.body.appendChild(ARButton.createButton(renderer, {
-  requiredFeatures: ['hit-test'],
-  optionalFeatures: ['hand-tracking', 'dom-overlay', 'local-floor'],
-  domOverlay: { root: document.body },
+  requiredFeatures: ['hand-tracking'],
+  optionalFeatures: ['hit-test', 'local-floor'],
 }));
+
+renderer.xr.addEventListener('sessionstart', () => { controls.enabled = false; });
+renderer.xr.addEventListener('sessionend', () => { controls.enabled = true; });
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -217,8 +285,17 @@ window.addEventListener('resize', () => {
 });
 
 renderer.setAnimationLoop(() => {
-  updateHands();
+  for (let i = 0; i < 2; i++) {
+    const from = grabbing[i];
+    if (!from) continue;
+    const hand = renderer.xr.getHand(i);
+    const tip = hand.joints?.['index-finger-tip'];
+    const mesh = pieces.get(from);
+    if (!tip || !mesh) continue;
+    const point = new THREE.Vector3().setFromMatrixPosition(tip.matrixWorld);
+    const local = root.worldToLocal(point);
+    mesh.position.set(local.x, 0.04, local.z);
+  }
+  controls.update();
   renderer.render(scene, camera);
 });
-
-setHud(turnText());

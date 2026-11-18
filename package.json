@@ -8,7 +8,9 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@iwer/devui": "2.8.0",
     "chess.js": "^1.4.0",
+    "iwer": "2.8.0",
     "three": "0.170.0"
   },
   "devDependencies": {
