@@ -17,6 +17,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm install && npm run build
+        env:
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
       - uses: actions/upload-pages-artifact@v3
         with: { path: dist }
       - id: deployment
