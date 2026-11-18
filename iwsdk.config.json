@@ -1,6 +1,12 @@
 {
   "version": "iwsdk.project.v1",
   "scene": "./public/scenes/main.iwsdk.scene.json",
+  "assets": {
+    "module": "./src/assets"
+  },
+  "components": {
+    "module": "./src/components"
+  },
   "world": {
     "xr": {
       "mode": "ar",
