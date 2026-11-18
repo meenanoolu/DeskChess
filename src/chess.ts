@@ -17,9 +17,9 @@ export class ChessSystem extends createSystem({}) {
     this.createPieces();
     this.createTurnIndicator();
     this.boardGroup.position.set(0, 0.75, -0.6);
-    this.boardGroup.visible = false;
+    this.boardGroup.visible = true;
     world.scene.add(this.boardGroup);
-    this.updateTurnText("Pinch on your desk to place the board");
+    this.updateTurnText("White's turn — Pinch a piece (or click in emulator)");
   }
 
   private createBoard() {
@@ -86,7 +86,7 @@ export class ChessSystem extends createSystem({}) {
     canvas.width = 512; canvas.height = 128;
     const ctx = canvas.getContext('2d')!;
     ctx.fillStyle = '#ffffff'; ctx.font = 'bold 36px Arial';
-    ctx.fillText("Pinch desk to place", 10, 70);
+    ctx.fillText("White's turn", 10, 70);
     const tex = new THREE.CanvasTexture(canvas);
     const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
     this.turnSprite = new THREE.Sprite(mat);
@@ -132,13 +132,11 @@ export class ChessSystem extends createSystem({}) {
     if (!this.boardPlaced) {
       for (const hand of [hands.left, hands.right]) {
         if (hand?.pinch?.pressed) {
-          this.boardGroup.visible = true;
           this.boardPlaced = true;
           this.updateTurnText("White's turn — Pinch a piece");
           break;
         }
       }
-      return;
     }
 
     for (const hand of [hands.left, hands.right]) {
