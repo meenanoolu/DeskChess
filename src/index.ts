@@ -2,9 +2,8 @@ import { World } from '@iwsdk/core';
 import projectOptions from 'virtual:iwsdk-project';
 import { ChessSystem } from './chess.js';
 
-World.create(
-  document.getElementById('scene-container') as HTMLDivElement,
-  projectOptions,
-).then((world) => {
+const container = document.getElementById('scene-container') as HTMLDivElement;
+
+World.create(container, projectOptions).then((world) => {
   world.registerSystem(ChessSystem);
 });
