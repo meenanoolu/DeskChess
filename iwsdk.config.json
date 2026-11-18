@@ -16,7 +16,8 @@
         "handTracking": { "required": true },
         "gazeTracking": true,
         "anchors": true,
-        "planeDetection": true
+        "planeDetection": true,
+        "meshDetection": true
       }
     },
     "input": {
@@ -27,13 +28,14 @@
       "near": 0.001,
       "far": 200,
       "camera": {
-        "position": [0, 1.6, 1],
-        "lookAt": [0, 1.15, -0.95]
+        "position": [0, 1.45, 0],
+        "lookAt": [0, 0.48, -1.95]
       }
     },
     "features": {
       "locomotion": false,
       "grabbing": true,
+      "sceneUnderstanding": true,
       "spatialUI": {
         "kit": "horizon",
         "preferredColorScheme": "dark"
@@ -43,7 +45,7 @@
   "dev": {
     "emulator": {
       "device": "metaQuest3",
-      "environment": "home_office"
+      "environment": "sunlit_living_room"
     }
   }
 }
