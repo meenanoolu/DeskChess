@@ -1,6 +1,6 @@
 # Desk Chess
 
-Hands-first realistic chess for Meta Quest and Meta VR Glasses. Gaze + pinch or direct tabletop grab. Built with Immersive Web SDK for the Meta VR Start Developer Competition 2026.
+Hands-first chess on the Meta XR simulator's sunlit living room. The board sits on the coffee table. Gaze + pinch, or grab a piece. Built with the Immersive Web SDK.
 
 ## Run
 
@@ -9,9 +9,9 @@ npm install
 npm run dev
 ```
 
-1. Enter XR in the emulator (or open the Pages URL on Quest).
-2. Switch to Gaze + Hands.
-3. Place both palms on a surface to calibrate the board, or let it appear in front of you.
-4. Look at a piece and pinch, or reach out and grab. Drop on a legal square.
+1. Open the runtime. The room is the built-in living room, not a custom background.
+2. Switch input to Gaze + Hands.
+3. Pinch a gold piece, or grab it, and drop it on a green square.
+4. Black answers on its own. Pinch the dark puck to start over.
 
-Seated, within a two-foot radius. Full rules via chess.js. No controllers required.
+Seated. Full rules. No controllers required.
