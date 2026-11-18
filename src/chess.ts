@@ -1,197 +1,244 @@
+import {
+  createSystem,
+  Entity,
+  Grabbed,
+  OneHandGrabbable,
+  Vector3,
+} from '@iwsdk/core';
 import { Chess } from 'chess.js';
-import * as THREE from 'three';
-import { createSystem, World } from '@iwsdk/core';
+import {
+  BoxGeometry,
+  CanvasTexture,
+  CylinderGeometry,
+  Group,
+  LatheGeometry,
+  Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  SphereGeometry,
+  Vector2,
+} from 'three';
+import { Piece } from './piece.js';
 
-export class ChessSystem extends createSystem({}) {
+const S = 0.052;
+
+function lathe(pts: number[][], mat: MeshStandardMaterial) {
+  const mesh = new Mesh(
+    new LatheGeometry(pts.map(([x, y]) => new Vector2(x, y)), 16),
+    mat,
+  );
+  mesh.castShadow = true;
+  return mesh;
+}
+
+const PROFILES: Record<string, number[][]> = {
+  p: [[0.016, 0], [0.018, 0.008], [0.011, 0.02], [0.012, 0.034], [0.007, 0.044], [0.011, 0.052], [0, 0.052]],
+  r: [[0.018, 0], [0.02, 0.01], [0.013, 0.018], [0.014, 0.046], [0.018, 0.054], [0.018, 0.062], [0, 0.062]],
+  n: [[0.018, 0], [0.02, 0.01], [0.011, 0.02], [0.009, 0.046], [0.013, 0.058], [0, 0.058]],
+  b: [[0.018, 0], [0.02, 0.01], [0.009, 0.026], [0.011, 0.05], [0.006, 0.064], [0.009, 0.072], [0, 0.072]],
+  q: [[0.02, 0], [0.022, 0.01], [0.01, 0.028], [0.013, 0.064], [0.016, 0.076], [0.007, 0.086], [0, 0.086]],
+  k: [[0.02, 0], [0.022, 0.01], [0.01, 0.028], [0.013, 0.07], [0.016, 0.082], [0.006, 0.094], [0, 0.094]],
+};
+
+function pieceObject(type: string, color: 'w' | 'b') {
+  const mat = new MeshStandardMaterial({
+    color: color === 'w' ? 0xf4efe4 : 0xc4212a,
+    metalness: color === 'w' ? 0.45 : 0.2,
+    roughness: 0.35,
+  });
+  const group = new Group();
+  group.add(lathe(PROFILES[type] ?? PROFILES.p, mat));
+  if (type === 'n') {
+    const head = new Mesh(new SphereGeometry(0.011, 10, 10), mat);
+    head.position.set(0.008, 0.054, 0.006);
+    group.add(head);
+  }
+  return group;
+}
+
+function squareAt(col: number, row: number) {
+  return new Vector3((col - 3.5) * S, 0.02, (row - 3.5) * S);
+}
+
+export class ChessSystem extends createSystem({
+  held: { required: [Piece, Grabbed] },
+}) {
   private chess = new Chess();
-  private boardGroup = new THREE.Group();
-  private pieces: Map<string, THREE.Object3D> = new Map();
-  private squareSize = 0.06;
-  private turnSprite: THREE.Sprite | null = null;
-  private selectedPiece: THREE.Object3D | null = null;
-  private selectedFrom: string | null = null;
-  private boardPlaced = false;
+  private board!: Group;
+  private boardEntity!: Entity;
+  private homes = new Map<Entity, Vector3>();
+  private hints!: Group;
+  private label!: Mesh;
+  private labelCanvas!: HTMLCanvasElement;
+  private pending: Entity[] = [];
+  private tmp = new Vector3();
 
-  init(world: World) {
-    this.createBoard();
-    this.createPieces();
-    this.createTurnIndicator();
-    this.boardGroup.position.set(0, 0.75, -0.6);
-    this.boardGroup.visible = true;
-    world.scene.add(this.boardGroup);
-    this.updateTurnText("White's turn — Pinch a piece (or click in emulator)");
-  }
+  init() {
+    this.board = new Group();
+    this.board.name = 'Chess Board';
+    this.board.position.set(0, 0.78, -0.62);
+    this.boardEntity = this.world.createTransformEntity(this.board);
 
-  private createBoard() {
-    const board = new THREE.Group();
-    const woodDark = new THREE.MeshStandardMaterial({ color: 0x8B5A2B, roughness: 0.7 });
-    const woodLight = new THREE.MeshStandardMaterial({ color: 0xD2B48C, roughness: 0.6 });
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0x5C4033 });
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(this.squareSize * 9, 0.02, this.squareSize * 9), frameMat);
-    frame.position.y = -0.01;
-    board.add(frame);
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const square = new THREE.Mesh(
-          new THREE.BoxGeometry(this.squareSize * 0.98, 0.008, this.squareSize * 0.98),
-          (r + c) % 2 === 0 ? woodLight : woodDark
+    const desk = new Mesh(
+      new CylinderGeometry(0.55, 0.55, 0.04, 40),
+      new MeshStandardMaterial({ color: 0x6a4328, roughness: 0.7 }),
+    );
+    desk.position.y = -0.03;
+    desk.receiveShadow = true;
+    this.board.add(desk);
+
+    const frame = new Mesh(
+      new BoxGeometry(S * 10, 0.02, S * 10),
+      new MeshStandardMaterial({ color: 0x3b2616, roughness: 0.65 }),
+    );
+    frame.receiveShadow = true;
+    this.board.add(frame);
+
+    const lightMat = new MeshStandardMaterial({ color: 0xf0ddc0, roughness: 0.5 });
+    const darkMat = new MeshStandardMaterial({ color: 0x8d5a32, roughness: 0.62 });
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const sq = new Mesh(
+          new BoxGeometry(S * 0.96, 0.008, S * 0.96),
+          (row + col) % 2 === 0 ? lightMat : darkMat,
         );
-        square.position.set((c - 3.5) * this.squareSize, 0, (r - 3.5) * this.squareSize);
-        board.add(square);
+        sq.position.copy(squareAt(col, row));
+        sq.position.y = 0.012;
+        sq.receiveShadow = true;
+        this.board.add(sq);
       }
     }
-    this.boardGroup.add(board);
-  }
 
-  private createPieceMesh(type: string, color: 'w' | 'b'): THREE.Group {
-    const group = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({
-      color: color === 'w' ? 0xE8D5B5 : 0xB22222,
-      metalness: 0.3,
-      roughness: 0.4,
+    this.hints = new Group();
+    this.board.add(this.hints);
+
+    this.labelCanvas = document.createElement('canvas');
+    this.labelCanvas.width = 1024;
+    this.labelCanvas.height = 128;
+    this.label = new Mesh(
+      new BoxGeometry(0.46, 0.07, 0.002),
+      new MeshBasicMaterial({ map: new CanvasTexture(this.labelCanvas) }),
+    );
+    this.label.position.set(0, 0.16, -S * 5.2);
+    this.board.add(this.label);
+
+    this.layout();
+    this.queries.held.subscribe('qualify', (entity: Entity) => {
+      const square = entity.getValue(Piece, 'square');
+      if (this.homes.has(entity) && square) this.showHints(square);
     });
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.01, 12), mat);
-    group.add(base);
-    let body: THREE.Mesh | null = null;
-    switch (type) {
-      case 'p': body = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 8), mat); body.position.y = 0.02; break;
-      case 'r': body = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.035, 8), mat); body.position.y = 0.025; break;
-      case 'n': body = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.04, 6), mat); body.position.y = 0.03; break;
-      case 'b': body = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), mat); body.position.y = 0.03; break;
-      case 'q': body = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.016, 0.045, 8), mat); body.position.y = 0.03; const crown = new THREE.Mesh(new THREE.SphereGeometry(0.008, 6, 6), mat); crown.position.y = 0.055; group.add(crown); break;
-      case 'k': body = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.018, 0.05, 8), mat); body.position.y = 0.032; const cross = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.02, 0.004), mat); cross.position.y = 0.06; group.add(cross); break;
-      default: body = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 8), mat);
+    this.queries.held.subscribe('disqualify', (entity: Entity) => {
+      this.pending.push(entity);
+    });
+  }
+
+  update() {
+    if (this.pending.length === 0) return;
+    const batch = this.pending.splice(0);
+    for (const entity of batch) this.release(entity);
+  }
+
+  private paint(text: string) {
+    const ctx = this.labelCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, 1024, 128);
+    ctx.fillStyle = '#1a120c';
+    ctx.fillRect(0, 0, 1024, 128);
+    ctx.fillStyle = '#f4efe4';
+    ctx.font = '600 36px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 512, 64);
+    const mat = this.label.material as MeshBasicMaterial;
+    if (mat.map) mat.map.needsUpdate = true;
+  }
+
+  private status(extra = '') {
+    if (this.chess.isCheckmate()) {
+      const winner = this.chess.turn() === 'w' ? 'Black' : 'White';
+      this.paint(`${winner} wins by checkmate.${extra}`);
+      return;
     }
-    if (body) group.add(body);
-    return group;
-  }
-
-  private createPieces() {
-    const board = this.chess.board();
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const p = board[r][c];
-        if (!p) continue;
-        const mesh = this.createPieceMesh(p.type, p.color);
-        mesh.userData = { square: this.coordsToSquare(r, c) };
-        mesh.position.set((c - 3.5) * this.squareSize, 0.02, (r - 3.5) * this.squareSize);
-        this.boardGroup.add(mesh);
-        this.pieces.set(this.coordsToSquare(r, c), mesh);
-      }
+    if (this.chess.isDraw()) {
+      this.paint(`Draw.${extra}`);
+      return;
     }
+    const who = this.chess.turn() === 'w' ? 'White' : 'Black';
+    const check = this.chess.inCheck() ? ' Check.' : '';
+    this.paint(`${who} to move.${check} Pinch a piece onto a green square.${extra}`);
   }
 
-  private createTurnIndicator() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512; canvas.height = 128;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 36px Arial';
-    ctx.fillText("White's turn", 10, 70);
-    const tex = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
-    this.turnSprite = new THREE.Sprite(mat);
-    this.turnSprite.scale.set(0.45, 0.11, 1);
-    this.turnSprite.position.set(0, 0.2, 0);
-    this.boardGroup.add(this.turnSprite);
+  private clearHints() {
+    while (this.hints.children.length) this.hints.remove(this.hints.children[0]);
   }
 
-  private coordsToSquare(row: number, col: number): string {
-    return String.fromCharCode(97 + col) + (8 - row);
-  }
-
-  private squareToLocal(sq: string): THREE.Vector3 {
-    const col = sq.charCodeAt(0) - 97;
-    const row = 8 - parseInt(sq[1]);
-    return new THREE.Vector3((col - 3.5) * this.squareSize, 0.02, (row - 3.5) * this.squareSize);
-  }
-
-  private worldToNearestSquare(worldPos: THREE.Vector3): string | null {
-    const local = this.boardGroup.worldToLocal(worldPos.clone());
-    const c = Math.round(local.x / this.squareSize + 3.5);
-    const r = Math.round(local.z / this.squareSize + 3.5);
-    if (c < 0 || c > 7 || r < 0 || r > 7) return null;
-    return this.coordsToSquare(r, c);
-  }
-
-  private updateTurnText(msg: string) {
-    if (!this.turnSprite) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = 512; canvas.height = 128;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 36px Arial';
-    ctx.fillText(msg, 10, 70);
-    const tex = new THREE.CanvasTexture(canvas);
-    (this.turnSprite.material as THREE.SpriteMaterial).map = tex;
-    (this.turnSprite.material as THREE.SpriteMaterial).needsUpdate = true;
-  }
-
-  update(world: World) {
-    const hands = (world as any).input?.xr?.hands;
-    if (!hands) return;
-
-    if (!this.boardPlaced) {
-      for (const hand of [hands.left, hands.right]) {
-        if (hand?.pinch?.pressed) {
-          this.boardPlaced = true;
-          this.updateTurnText("White's turn — Pinch a piece");
-          break;
-        }
-      }
-    }
-
-    for (const hand of [hands.left, hands.right]) {
-      if (!hand) continue;
-      const pinching = hand.pinch?.pressed;
-      const pos = hand.pinch?.position || hand.grip?.position;
-      if (!pos) continue;
-
-      if (pinching && !this.selectedPiece) {
-        let closest: THREE.Object3D | null = null;
-        let minDist = 0.08;
-        this.pieces.forEach((piece) => {
-          const d = piece.getWorldPosition(new THREE.Vector3()).distanceTo(pos);
-          if (d < minDist) {
-            minDist = d;
-            closest = piece;
-          }
-        });
-        if (closest) {
-          this.selectedPiece = closest;
-          this.selectedFrom = closest.userData.square;
-        }
-      }
-
-      if (this.selectedPiece && pinching) {
-        const local = this.boardGroup.worldToLocal(pos.clone());
-        this.selectedPiece.position.set(local.x, 0.04, local.z);
-      }
-
-      if (this.selectedPiece && !pinching && this.selectedFrom) {
-        const targetSq = this.worldToNearestSquare(pos);
-        if (targetSq && targetSq !== this.selectedFrom) {
-          this.tryMove(this.selectedFrom, targetSq);
-        } else {
-          const back = this.squareToLocal(this.selectedFrom);
-          this.selectedPiece.position.copy(back);
-        }
-        this.selectedPiece = null;
-        this.selectedFrom = null;
-      }
+  private showHints(from: string) {
+    this.clearHints();
+    const mat = new MeshBasicMaterial({ color: 0x39e07a });
+    for (const move of this.chess.moves({ square: from as 'a2', verbose: true })) {
+      const col = move.to.charCodeAt(0) - 97;
+      const row = 8 - Number(move.to[1]);
+      const dot = new Mesh(new SphereGeometry(move.captured ? 0.012 : 0.008, 10, 10), mat);
+      dot.position.copy(squareAt(col, row));
+      dot.position.y = 0.03;
+      this.hints.add(dot);
     }
   }
 
-  tryMove(from: string, to: string) {
-    const move = this.chess.move({ from, to, promotion: 'q' });
-    if (move) {
-      this.refreshPieces();
-      const reaction = this.chess.turn() === 'w' ? "White's turn" : "Black's turn — Nice move!";
-      this.updateTurnText(reaction);
+  private layout() {
+    for (const entity of this.homes.keys()) entity.dispose();
+    this.homes.clear();
+    this.pending.length = 0;
+    this.clearHints();
+    const rows = this.chess.board();
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const piece = rows[row][col];
+        if (!piece) continue;
+        const id = String.fromCharCode(97 + col) + (8 - row);
+        const mesh = pieceObject(piece.type, piece.color);
+        mesh.name = `Piece ${id}`;
+        const entity = this.world.createTransformEntity(mesh, this.boardEntity);
+        const home = squareAt(col, row);
+        mesh.position.copy(home);
+        entity.addComponent(OneHandGrabbable, { rotate: false });
+        entity.addComponent(Piece, { square: id });
+        this.homes.set(entity, home);
+      }
     }
+    this.status();
   }
 
-  private refreshPieces() {
-    this.pieces.forEach((obj) => this.boardGroup.remove(obj));
-    this.pieces.clear();
-    this.createPieces();
+  private release(entity: Entity) {
+    const home = this.homes.get(entity);
+    const obj = entity.object3D;
+    if (!home || !obj || !this.homes.has(entity)) return;
+    const from = entity.getValue(Piece, 'square');
+    if (!from) return;
+    this.board.updateWorldMatrix(true, false);
+    obj.updateWorldMatrix(true, false);
+    const local = this.board.worldToLocal(this.tmp.copy(obj.getWorldPosition(this.tmp)));
+    const col = Math.round(local.x / S + 3.5);
+    const row = Math.round(local.z / S + 3.5);
+    const to = col >= 0 && col < 8 && row >= 0 && row < 8
+      ? String.fromCharCode(97 + col) + (8 - row)
+      : '';
+    const occupant = to ? this.chess.get(to as 'a2') : null;
+    if (to && occupant && occupant.color === this.chess.turn() && to !== from) {
+      obj.position.copy(home);
+      obj.quaternion.identity();
+      this.showHints(to);
+      this.status(` Holding ${to}.`);
+      return;
+    }
+    const move = to ? this.chess.move({ from: from as 'a2', to: to as 'a2', promotion: 'q' }) : null;
+    if (!move) {
+      obj.position.copy(home);
+      obj.quaternion.identity();
+      this.status(' Illegal drop.');
+      return;
+    }
+    this.layout();
+    this.status(move.captured ? ' Captured.' : '');
   }
 }

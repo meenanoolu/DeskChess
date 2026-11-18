@@ -1,16 +1,20 @@
 # Desk Chess
 
-Hands-first chess on your real desk for Meta Quest (IWSDK / WebXR).
+Hands-first chess for a desk. Pinch a piece and drop it on a green square. Built with the Immersive Web SDK during the Meta VR Start Developer Competition 2026.
 
-Pinch pieces to move them. Hot-seat multiplayer with turn reactions. Seated, no controllers required.
+## Run it the way the IWSDK starter runs
 
-## Run
-
+```bash
 npm install
 npm run dev
+```
 
-Open the URL in Quest Browser and Enter AR. Or use the IWER emulator.
+That opens the Quest 3 emulator in a sunlit living room.
 
-## Deploy
+1. Click Enter XR.
+2. Switch input to hands.
+3. Click Play.
+4. Left click pinches the left hand. Right click pinches the right hand.
+5. Pinch a piece of the side to move, and release it over a green square.
 
-Push to main for GitHub Pages.
+On a Quest, open the GitHub Pages URL in the headset Browser and use Enter AR.
