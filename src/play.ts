@@ -26,10 +26,10 @@ export function tryMove(chess: Chess, from: string, to: string) {
 }
 
 export function statusLine(chess: Chess) {
-  if (chess.isCheckmate()) return chess.turn() === 'w' ? 'Black wins \u2014 reset' : 'White wins \u2014 reset';
-  if (chess.isDraw()) return 'Draw \u2014 reset';
+  if (chess.isCheckmate()) return chess.turn() === 'w' ? 'Black wins' : 'White wins';
+  if (chess.isDraw()) return 'Draw';
   if (chess.inCheck()) return chess.turn() === 'w' ? 'White is in check' : 'Black is in check';
-  return chess.turn() === 'w' ? 'White to move' : 'Black to move';
+  return chess.turn() === 'w' ? 'Your move' : 'Bot is thinking';
 }
 
 export function evaluate(chess: Chess) {
@@ -97,4 +97,30 @@ export function chooseMove(chess: Chess, depth = 2): Move | null {
     }
   }
   return best;
+}
+
+/** Short mates a judge can finish. Each one is white to move, mate in 2, not mate in 1. */
+export const PUZZLES = [
+  { fen: '7k/8/6K1/6Q1/8/8/8/8 w - - 0 1' },
+  { fen: '7k/5N1p/6p1/8/8/8/8/Q5K1 w - - 0 1' },
+  { fen: 'k7/2Q5/1K6/8/8/8/8/8 w - - 0 1' },
+];
+
+/** True when this move leaves every reply losing on the next move. */
+export function forcesMateInTwo(fen: string, from: string, to: string) {
+  const chess = new Chess(fen);
+  if (!tryMove(chess, from, to) || chess.isCheckmate()) return false;
+  const replies = chess.moves({ verbose: true });
+  if (replies.length === 0) return false;
+  for (const reply of replies) {
+    chess.move({ from: reply.from, to: reply.to, promotion: reply.promotion ?? 'q' });
+    const mates = chess.moves({ verbose: true }).some((white) => {
+      const next = new Chess(chess.fen());
+      const hit = tryMove(next, white.from, white.to);
+      return Boolean(hit) && next.isCheckmate();
+    });
+    chess.undo();
+    if (!mates) return false;
+  }
+  return true;
 }
