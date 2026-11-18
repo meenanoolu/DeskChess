@@ -1,0 +1,22 @@
+{
+  "version": "iwsdk.project.v1",
+  "scene": "./public/scenes/main.iwsdk.scene.json",
+  "world": {
+    "xr": {
+      "mode": "ar",
+      "offer": "always",
+      "features": {
+        "handTracking": true,
+        "hitTest": true,
+        "planeDetection": true
+      }
+    },
+    "features": {
+      "grabbing": true,
+      "physics": true,
+      "sceneUnderstanding": true,
+      "environmentRaycast": true,
+      "locomotion": false
+    }
+  }
+}
