@@ -280,6 +280,10 @@ export class ChessSystem extends createSystem({
   }
 
   private tryTable() {
+    this.player.head.getWorldPosition(this.headPos);
+    const dir = new Vector3();
+    this.player.head.getWorldDirection(dir);
+    dir.y = 0;
     let bestY = -1;
     let best: Vector3 | null = null;
     for (const entity of this.queries.planes.entities) {
@@ -287,6 +291,9 @@ export class ChessSystem extends createSystem({
       if (!obj) continue;
       obj.getWorldPosition(this.tmp);
       if (this.tmp.y < 0.35 || this.tmp.y > 0.9) continue;
+      const toward = this.tmp.clone().sub(this.headPos);
+      toward.y = 0;
+      if (dir.lengthSq() > 0.001 && toward.dot(dir) < 0.2) continue;
       if (this.tmp.y > bestY) {
         bestY = this.tmp.y;
         best = this.tmp.clone();
@@ -294,7 +301,6 @@ export class ChessSystem extends createSystem({
     }
     if (!best) return;
     this.board.position.set(best.x, best.y, best.z);
-    this.player.head.getWorldPosition(this.headPos);
     const flat = new Vector2(this.headPos.x - best.x, this.headPos.z - best.z);
     if (flat.lengthSq() > 0.01) this.board.rotation.y = Math.atan2(flat.x, flat.y);
     this.anchored = true;
