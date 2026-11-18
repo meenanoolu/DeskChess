@@ -43,7 +43,7 @@
   "dev": {
     "emulator": {
       "device": "metaQuest3",
-      "environment": "office"
+      "environment": "home_office"
     }
   }
 }
