@@ -107,7 +107,9 @@ export class ChessSystem extends createSystem({
   init() {
     this.board = new Group();
     this.board.name = 'Chess Board';
-    this.board.position.set(0, 0.72, -0.4);
+    this.board.position.set(0, 0.43, -1.2);
+    this.board.visible = true;
+    this.placed = true;
     this.board.visible = false;
     this.boardEntity = this.world.createTransformEntity(this.board);
 
@@ -184,7 +186,6 @@ export class ChessSystem extends createSystem({
     resetEntity.addComponent(Piece, { square: 'reset' });
 
     this.paint('Loading the pieces.');
-    this.board.visible = true;
     void this.loadPieces();
 
     this.queries.held.subscribe('qualify', (entity: Entity) => {
@@ -214,8 +215,6 @@ export class ChessSystem extends createSystem({
   }
 
   update() {
-    if (this.ready && !this.placed) this.placeInFront();
-    if (!this.anchored) this.tryTable();
     this.hoverRing.visible = false;
     for (const entity of this.queries.looked.entities) {
       const obj = entity.object3D;
@@ -266,16 +265,20 @@ export class ChessSystem extends createSystem({
 
   private placeInFront() {
     this.player.head.getWorldPosition(this.headPos);
-    if (this.headPos.lengthSq() < 0.01) return;
+    if (this.headPos.y < 0.4) return;
     const dir = new Vector3();
     this.player.head.getWorldDirection(dir);
     dir.y = 0;
     if (dir.lengthSq() < 0.001) dir.set(0, 0, -1);
     dir.normalize();
-    this.board.position.copy(this.headPos).addScaledVector(dir, 0.62);
-    this.board.position.y = Math.max(0.42, this.headPos.y - 0.62);
+    this.board.position.set(
+      this.headPos.x + dir.x * 1.05,
+      0.46,
+      this.headPos.z + dir.z * 1.05,
+    );
     this.board.rotation.y = Math.atan2(dir.x, dir.z);
     this.placed = true;
+    this.anchored = true;
     this.started = true;
   }
 
