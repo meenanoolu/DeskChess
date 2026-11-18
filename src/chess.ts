@@ -1,8 +1,8 @@
 import { Chess } from 'chess.js';
 import * as THREE from 'three';
-import { System, World } from '@iwsdk/core';
+import { createSystem, World } from '@iwsdk/core';
 
-export class ChessSystem extends System {
+export class ChessSystem extends createSystem({}) {
   private chess = new Chess();
   private boardGroup = new THREE.Group();
   private pieces: Map<string, THREE.Object3D> = new Map();
@@ -10,7 +10,6 @@ export class ChessSystem extends System {
   private turnSprite: THREE.Sprite | null = null;
 
   init(world: World) {
-    super.init(world);
     this.createBoard();
     this.createPieces();
     this.createTurnIndicator();
