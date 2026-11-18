@@ -243,7 +243,8 @@ export class ChessSystem extends createSystem({
     this.world.createTransformEntity(this.ringL);
     this.world.createTransformEntity(this.ringR);
 
-    this.paintStatus('Place the board');
+    this.paintStatus('Loading pieces');
+    this.placeBoard(COFFEE.x, COFFEE.y, COFFEE.z);
     void this.loadPieces();
 
     this.queries.held.subscribe('qualify', (entity: Entity) => {
@@ -388,32 +389,15 @@ export class ChessSystem extends createSystem({
   private placeBoard(x: number, y: number, z: number) {
     if (this.placed) return;
     this.board.position.set(x, y + 0.002, z);
-    this.player.head.getWorldPosition(this.headPos);
-    const dx = this.headPos.x - x;
-    const dz = this.headPos.z - z;
-    this.board.rotation.y = dx * dx + dz * dz > 0.0025 ? Math.atan2(dx, dz) : 0;
+    // +Z is the near edge. The emulator camera sits at the origin looking down the table.
+    this.board.rotation.y = 0;
     this.board.visible = true;
     this.placed = true;
     this.calib.visible = false;
     this.ringL.visible = false;
     this.ringR.visible = false;
-    if (Math.hypot(x, z + 1.95) < 0.55) this.stepTowardCoffee(x, z);
     if (this.geos.size === Object.keys(FILES).length) this.startMatch();
     else this.paintStatus('Loading pieces');
-  }
-
-  /** Emulator spawn is the room origin. Step up to the coffee table so hands can reach. */
-  private stepTowardCoffee(x: number, z: number) {
-    this.player.head.getWorldPosition(this.headPos);
-    if (Math.hypot(this.headPos.x, this.headPos.z) > 0.85) return;
-    this.player.position.z -= 1.05;
-    this.player.updateWorldMatrix(true, true);
-    this.camera.position.set(0, 1.42, 0);
-    this.camera.lookAt(0, 0.5, -1.95);
-    this.player.head.getWorldPosition(this.headPos);
-    const dx = this.headPos.x - x;
-    const dz = this.headPos.z - z;
-    if (dx * dx + dz * dz > 0.0025) this.board.rotation.y = Math.atan2(dx, dz);
   }
 
   private pressButton(square: string) {
