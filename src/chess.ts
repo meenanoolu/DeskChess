@@ -8,6 +8,7 @@ import {
   Pressed,
   RayInteractable,
   Vector3,
+  XRPlane,
 } from '@iwsdk/core';
 import { Chess, type Square } from 'chess.js';
 import {
@@ -80,6 +81,7 @@ export class ChessSystem extends createSystem({
   held: { required: [Piece, Grabbed] },
   looked: { required: [Piece, Hovered] },
   pressed: { required: [Piece, Pressed] },
+  planes: { required: [XRPlane] },
 }) {
   private chess = new Chess();
   private board!: Group;
@@ -94,6 +96,8 @@ export class ChessSystem extends createSystem({
   private geos = new Map<string, BufferGeometry>();
   private started = false;
   private ready = false;
+  private placed = false;
+  private anchored = false;
   private selected: Square | null = null;
   private tmp = new Vector3();
   private leftHand = new Vector3();
@@ -103,7 +107,7 @@ export class ChessSystem extends createSystem({
   init() {
     this.board = new Group();
     this.board.name = 'Chess Board';
-    this.board.position.set(0, 0.74, -0.72);
+    this.board.position.set(0, 0.72, -0.4);
     this.board.visible = false;
     this.boardEntity = this.world.createTransformEntity(this.board);
 
@@ -179,7 +183,7 @@ export class ChessSystem extends createSystem({
     resetEntity.addComponent(RayInteractable);
     resetEntity.addComponent(Piece, { square: 'reset' });
 
-    this.paint('Put both hands flat on the table.');
+    this.paint('Loading the pieces.');
     this.board.visible = true;
     void this.loadPieces();
 
@@ -210,7 +214,8 @@ export class ChessSystem extends createSystem({
   }
 
   update() {
-    if (!this.started && this.ready) this.watchHands();
+    if (this.ready && !this.placed) this.placeInFront();
+    if (!this.anchored) this.tryTable();
     this.hoverRing.visible = false;
     for (const entity of this.queries.looked.entities) {
       const obj = entity.object3D;
@@ -255,7 +260,46 @@ export class ChessSystem extends createSystem({
       ),
     );
     this.ready = true;
-    this.paint('Put both hands flat on the table.');
+    this.layout();
+    this.paint("It's White's turn. Pinch a gold piece, drop it on green.");
+  }
+
+  private placeInFront() {
+    this.player.head.getWorldPosition(this.headPos);
+    if (this.headPos.lengthSq() < 0.01) return;
+    const dir = new Vector3();
+    this.player.head.getWorldDirection(dir);
+    dir.y = 0;
+    if (dir.lengthSq() < 0.001) dir.set(0, 0, -1);
+    dir.normalize();
+    this.board.position.copy(this.headPos).addScaledVector(dir, 0.62);
+    this.board.position.y = Math.max(0.42, this.headPos.y - 0.62);
+    this.board.rotation.y = Math.atan2(dir.x, dir.z);
+    this.placed = true;
+    this.started = true;
+  }
+
+  private tryTable() {
+    let bestY = -1;
+    let best: Vector3 | null = null;
+    for (const entity of this.queries.planes.entities) {
+      const obj = entity.object3D;
+      if (!obj) continue;
+      obj.getWorldPosition(this.tmp);
+      if (this.tmp.y < 0.35 || this.tmp.y > 0.9) continue;
+      if (this.tmp.y > bestY) {
+        bestY = this.tmp.y;
+        best = this.tmp.clone();
+      }
+    }
+    if (!best) return;
+    this.board.position.set(best.x, best.y, best.z);
+    this.player.head.getWorldPosition(this.headPos);
+    const flat = new Vector2(this.headPos.x - best.x, this.headPos.z - best.z);
+    if (flat.lengthSq() > 0.01) this.board.rotation.y = Math.atan2(flat.x, flat.y);
+    this.anchored = true;
+    this.placed = true;
+    this.started = true;
   }
 
   private watchHands() {
