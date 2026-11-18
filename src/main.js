@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Chess } from 'chess.js';
@@ -61,7 +62,7 @@ controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
 controls.update();
 
 const table = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.42, 0.42, 0.025, 48),
+  new THREE.CylinderGeometry(0.7, 0.7, 0.03, 48),
   new THREE.MeshStandardMaterial({ color: 0x6a4328, roughness: 0.72 }),
 );
 table.position.y = -0.02;
@@ -166,21 +167,17 @@ function turnLine() {
   if (chess.isCheckmate()) return (chess.turn() === 'w' ? 'Black' : 'White') + ' wins by checkmate.';
   if (chess.isDraw()) return 'Draw.';
   const who = chess.turn() === 'w' ? 'White' : 'Black';
-  return who + ' to move' + (chess.inCheck() ? ' — check' : '') + '.';
+  return who + ' to move' + (chess.inCheck() ? ' \u2014 check' : '') + '.';
 }
 function helpLine() {
   return native
     ? 'Click a piece, then a green square. On Quest, Enter AR and pinch.'
-    : 'Click a piece, then a green square. Enter AR opens a Quest 3 emulator — use its hand controls and pinch.';
+    : 'Click a piece, then a green square. Enter VR puts the board in front of the emulated headset. Pinch a piece to move it.';
 }
 function refreshHud(extra = '') { setHud(turnLine() + ' ' + helpLine() + extra); }
 refreshHud();
 
-function select(id) {
-  selected = id;
-  showHints(id);
-  refreshHud(' Holding ' + id + '.');
-}
+function select(id) { selected = id; showHints(id); refreshHud(' Holding ' + id + '.'); }
 function finishMove(from, to) {
   const move = chess.move({ from, to, promotion: 'q' });
   selected = null;
@@ -270,13 +267,43 @@ for (let i = 0; i < 2; i++) {
   });
 }
 
-document.body.appendChild(ARButton.createButton(renderer, {
+document.body.appendChild((native ? ARButton : VRButton).createButton(renderer, {
   requiredFeatures: ['hand-tracking'],
   optionalFeatures: ['hit-test', 'local-floor'],
 }));
 
-renderer.xr.addEventListener('sessionstart', () => { controls.enabled = false; });
-renderer.xr.addEventListener('sessionend', () => { controls.enabled = true; });
+let placeFrames = 0;
+function placeInFrontOfHead() {
+  const cam = renderer.xr.getCamera();
+  const head = new THREE.Vector3();
+  cam.getWorldPosition(head);
+  const dir = new THREE.Vector3();
+  cam.getWorldDirection(dir);
+  dir.y = 0;
+  if (dir.lengthSq() < 1e-4) dir.set(0, 0, -1);
+  dir.normalize();
+  root.position.copy(head).addScaledVector(dir, 0.5);
+  root.position.y = head.y - 0.36;
+  const toHead = new THREE.Vector3(head.x - root.position.x, 0, head.z - root.position.z);
+  root.rotation.y = Math.atan2(toHead.x, toHead.z);
+}
+
+renderer.xr.addEventListener('sessionstart', () => {
+  controls.enabled = false;
+  placeFrames = 30;
+  const session = renderer.xr.getSession();
+  const opaque = session?.environmentBlendMode !== 'additive' && session?.environmentBlendMode !== 'alpha-blend';
+  renderer.setClearColor(opaque ? 0x24180f : 0x000000, opaque ? 1 : 0);
+  scene.background = opaque ? new THREE.Color(0x24180f) : null;
+});
+renderer.xr.addEventListener('sessionend', () => {
+  controls.enabled = true;
+  placeFrames = 0;
+  root.position.copy(boardPos);
+  root.rotation.set(0, 0, 0);
+  scene.background = new THREE.Color(0x24180f);
+  renderer.setClearColor(0x000000, 0);
+});
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -285,6 +312,10 @@ window.addEventListener('resize', () => {
 });
 
 renderer.setAnimationLoop(() => {
+  if (placeFrames > 0 && renderer.xr.isPresenting) {
+    placeInFrontOfHead();
+    placeFrames--;
+  }
   for (let i = 0; i < 2; i++) {
     const from = grabbing[i];
     if (!from) continue;
